@@ -497,6 +497,8 @@ LON, LAT = np.meshgrid(lon_slice, lat_slice)
 
 plt.contourf(LON, LAT, z_slice)
 plt.axis('equal')
+plt.xlabel('longitude')
+plt.ylabel('latitude')
 plt.colorbar()
 plt.show()
 
@@ -990,7 +992,7 @@ for ii in range(6):
     if isFace_vect[ ii ]:
     
 
-
+        eList_surf = []
         for jj in range(tri[ii].simplices.shape[0]):
         
             
@@ -1040,7 +1042,7 @@ for ii in range(6):
                     e_globalList.append(-current_e)
                     
                     eList.append(current_e)
-                    eList_full.append(current_e)
+                    
                     
                     pointVertex_globalList.append( [p1, p2] )
                     pointVertex_globalList.append( [p2, p1] )
@@ -1053,16 +1055,48 @@ for ii in range(6):
                     candidate = [np.allclose([p1, p2],point) for point in pointVertex_globalList].index(True)
                     eList.append(e_globalList[candidate])
                     
+                    
             
-          
-            gmsh.model.geo.addCurveLoop(eList, iLoop)
-            gmsh.model.geo.addPlaneSurface([iLoop], iSurf)
-            iLoop += 1
-            iSurf += 1
-            
-        
-        
+            is_entered = False
+            for ee in eList:
+                if (ee in eList_surf):
+                    is_entered = True
+                    for ee_int in eList:
+                        if (ee_int not in eList_surf):
+                            eList_surf.append(-ee_int)
+                        else:
+                            eList_surf.remove(ee_int)
+                        
+                    break
+                    
+                if (-ee in eList_surf):
+                    is_entered = True
+                    for ee_int in eList:
+                        if (-ee_int not in eList_surf):
+                            eList_surf.append(ee_int)
+                        else:
+                            eList_surf.remove(-ee_int)
+                            
+                    break
 
+            
+            if (not is_entered):
+                for ee_int in eList:
+                    eList_surf.append(ee_int)
+                    
+            
+        
+        for ee in eList_surf:
+            if (np.abs(ee) not in eList_full):
+                eList_full.append(ee)
+            
+        gmsh.model.geo.addCurveLoop(eList_surf, iLoop)
+        gmsh.model.geo.addPlaneSurface([iLoop], iSurf)
+        iLoop += 1
+        iSurf += 1
+            
+        
+        
 
 gmsh.model.geo.synchronize()
 gmsh.model.addPhysicalGroup(1, eList_full, 1)
@@ -1107,7 +1141,7 @@ for ii in range(6):
     if isFace_vect[ ii ]:
     
 
-
+        eList_surf = []
         for jj in range(tri[ii].simplices.shape[0]):
         
             
@@ -1167,11 +1201,38 @@ for ii in range(6):
                     eList.append(e_globalList[candidate])
                     
             
-          
-            gmsh.model.geo.addCurveLoop(eList, iLoop)
-            gmsh.model.geo.addPlaneSurface([iLoop], iSurf)
-            iLoop += 1
-            iSurf += 1
+            is_entered = False
+            for ee in eList:
+                if (ee in eList_surf):
+                    is_entered = True
+                    for ee_int in eList:
+                        if (ee_int not in eList_surf):
+                            eList_surf.append(-ee_int)
+                        else:
+                            eList_surf.remove(ee_int)
+                        
+                    break
+                    
+                if (-ee in eList_surf):
+                    is_entered = True
+                    for ee_int in eList:
+                        if (-ee_int not in eList_surf):
+                            eList_surf.append(ee_int)
+                        else:
+                            eList_surf.remove(-ee_int)
+                            
+                    break
+
+            
+            if (not is_entered):
+                for ee_int in eList:
+                    eList_surf.append(ee_int)
+
+                
+        gmsh.model.geo.addCurveLoop(eList_surf, iLoop)
+        gmsh.model.geo.addPlaneSurface([iLoop], iSurf)
+        iLoop += 1
+        iSurf += 1
             
             
 gmsh.model.geo.synchronize()
