@@ -5,14 +5,13 @@ import numpy as np
 from scipy import interpolate
 from scipy import ndimage
 from scipy.spatial import Delaunay
-import subprocess
-import os
-from subprocess import STDOUT, check_output
+#import subprocess
+#import os
+#from subprocess import STDOUT, check_output
 import netCDF4
 import matplotlib.pyplot as plt
 import gmsh
 import meshio
-import pdb # pdb.set_trace() to set breakpoint
 
 def Sphere2Cube(lon_deg, lat_deg, lat_dem_res, lon_dem_res, idFace, a = 1):
 
