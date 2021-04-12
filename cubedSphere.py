@@ -11,6 +11,7 @@ from subprocess import STDOUT, check_output
 import netCDF4
 import matplotlib.pyplot as plt
 import gmsh
+import meshio
 import pdb # pdb.set_trace() to set breakpoint
 
 def Sphere2Cube(lon_deg, lat_deg, lat_dem_res, lon_dem_res, idFace, a = 1):
@@ -50,15 +51,15 @@ def Sphere2Cube(lon_deg, lat_deg, lat_dem_res, lon_dem_res, idFace, a = 1):
         x[mask] = 0.
         y[mask] = 0.
     else:
-        print("Not recognized cube-face Id")
-        
+        print("Not recognized cube-face Id, STOP!")
+        sys.exit()
         
     return [x, y]
     
 
 
 def XYZ2LonLat(X, Y, Z, lon_crop_extent, a=1):
-    R = a*np.sqrt(3.)
+
     r = np.sqrt(X**2 + Y**2 + Z**2)
     
     lat = np.arcsin(Z/r)*180./np.pi
@@ -67,15 +68,6 @@ def XYZ2LonLat(X, Y, Z, lon_crop_extent, a=1):
     mask = np.logical_and(X==0, Y==0)
     lon[mask] = lon_crop_extent[0]
     
-#    lon[np.where(np.isnan(lon))] = lon_crop_extent[0]
-    
-#    col = lon[lon<lon_crop_extent[0]]
-#    inds = np.where(np.isnan(col))
-#
-#    col_mean = np.nanmean(col)
-#    lon[inds] = col_mean
-#
-#    pdb.set_trace()
     
     return [lat, lon]
 
@@ -113,8 +105,8 @@ def Local2Global(x, y, idFace, a = 1):
         Z = 0*x-a
          
     else:
-        print("Not recognized cube-face Id")
-        
+        print("Not recognized cube-face Id, STOP!")
+        sys.exit()
         
     return [X, Y, Z]
     
@@ -145,7 +137,8 @@ def Global2Local(X, Y, Z, idFace, a = 1):
         y = -a*X/Z
          
     else:
-        print("Not recognized cube-face Id")
+        print("Not recognized cube-face Id, STOP!")
+        sys.exit()
         
         
     return [x, y]
@@ -214,7 +207,8 @@ def computeGrad(d_z_lat_slice, d_z_lon_slice, LON_deg, LAT_deg, idFace, a=1.):
         d_y_lon = a * np.sin(LON) * 1 / np.tan(LAT)
          
     else:
-        print("Not recognized cube-face Id")
+        print("Not recognized cube-face Id, STOP!")
+        sys.exit()
         
     
     d_z_x = d_z_lat_slice*d_x_lat + d_z_lon_slice*d_x_lon
@@ -245,10 +239,11 @@ def compute_size_field(nodes, triangles, oro_interp, d_z_lat_interp, d_z_lon_int
     
 #    plt.triplot(x_local, y_local, triangles)
 #    plt.tricontourf(x_local, y_local, triangles, z_node)
-    plt.tricontourf(lon_interp_node, lat_interp_node, triangles, z_node)
-    plt.axis('equal')
-    plt.colorbar()
-    plt.show()
+
+#    plt.tricontourf(lon_interp_node, lat_interp_node, triangles, z_node)
+#    plt.axis('equal')
+#    plt.colorbar()
+#    plt.show()
     
     
     z_node = z_node[triangles]
@@ -280,9 +275,7 @@ def compute_size_field(nodes, triangles, oro_interp, d_z_lat_interp, d_z_lon_int
             
             z_grad += edge_normal * z_node_triangle[ iEdge+2 ]
             
-        
-#        area_triangle = np.cross(xyz_triangle[1,:] - xyz_triangle[0,:], xyz_triangle[2,:] - xyz_triangle[0,:])
-#        area_triangle = np.linalg.norm(area_triangle)/2.
+
         
         
         if (np.allclose(xyz_triangle[0,0],1.) and np.allclose(xyz_triangle[1,0],1.) and np.allclose(xyz_triangle[2,0],1.)):
@@ -298,7 +291,8 @@ def compute_size_field(nodes, triangles, oro_interp, d_z_lat_interp, d_z_lon_int
         elif (np.allclose(xyz_triangle[0,2],-1.) and np.allclose(xyz_triangle[1,2],-1.) and np.allclose(xyz_triangle[2,2],-1.)):
             iCubeFace = 5
         else:
-            print("Not recognized cube-face Id")
+            print("Not recognized cube-face Id, STOP!")
+            sys.exit()
             
             
             
@@ -319,7 +313,7 @@ def GetId(LatOrLonDEM, LatOrLonExtent, LatLon_dem_res):
 
 class Mesh:
     def __init__(self):
-        [self.vtags, vxyz, _] = gmsh.model.mesh.getNodes()
+        self.vtags, vxyz, _ = gmsh.model.mesh.getNodes()
         
         self.vxyz = vxyz.reshape((-1, 3))
         vmap = dict({j: i for i, j in enumerate(self.vtags)})
@@ -328,95 +322,6 @@ class Mesh:
         self.triangles = evid.reshape((self.triangles_tags.shape[-1], -1))
 
 
-
-def modifyMeshFile(file, output_file, idFace, a=1):
-    # back-transform in the coordinates of the sphere
-    #
-    file_o = open(file)
-    listOfLines = file_o.readlines()
-
-    #
-    file = open(output_file,"w")
-    
-
-    for i in range(len(listOfLines)):
-        line = listOfLines[i]
-      
-        if line.strip() == "Vertices":
-            nbVertices = listOfLines[i+1]
-            file.write("MeshVersionFormatted 2\n")
-            file.write("Dimension\n")
-            file.write("3\n")
-            file.write("Vertices\n")
-            file.write(nbVertices)# + "\n")
-            for j in range(int(nbVertices)):
-                k = j+i+1+1
-                
-                myarray = listOfLines[k].split()
-                x = float(myarray[0])
-                y = float(myarray[1])
-                #z = myarray[2]
-                [lat, lon] = Cube2Sphere(x, y, idFace, a)
-                file.write(str(lon) + " " + str(lat) + " " + str(a) + " " + myarray[3] + "\n")
-                #print(myarray[0] + " " + myarray[1])
-                
-            i = k
-
-        if line.strip() == "Quadrilaterals":
-            nbQuad = listOfLines[i+1]
-            file.write("Quadrilaterals\n")
-            file.write(nbQuad)
-            for j in range(int(nbQuad)):
-                k = j+i+1+1
-
-                myarray = listOfLines[k].split()
-                file.write(myarray[0] + " " + myarray[1] + " " + myarray[2] + " " + myarray[3] + " " + myarray[4] + "\n")
-                #file.write(listOfLines[k])
-                
-    
-    file.write("End")
-        
-    file_o.close()
-    file.close()
-    
-def writeDatFileQuad(meshFile, output_file):
-
-    #
-    file_o = open(meshFile,"r")
-    listOfLines = file_o.readlines()
-
-    #
-    file = open(output_file,"w")
-
-
-
-    for i in range(len(listOfLines)):
-        line = listOfLines[i]
-      
-        if line.strip() == "Vertices":
-            nbVertices = listOfLines[i+1]
-            file.write(nbVertices)# + "\n")
-            for j in range(int(nbVertices)):
-                k = j+i+1+1
-                
-                myarray = listOfLines[k].split()
-                file.write(myarray[0] + " " + myarray[1] + " " + myarray[2] + "\n")
-                #print(myarray[0] + " " + myarray[1])
-            i = k
-
-        if line.strip() == "Quadrilaterals":
-            nbHex = listOfLines[i+1]
-            file.write(nbHex)
-            for j in range(int(nbHex)):
-                k = j+i+1+1
-
-                myarray = listOfLines[k].split()
-                file.write(myarray[4] + " " + myarray[0] + " " + myarray[1] + " " + myarray[2] + " " + myarray[3] + "\n")
-                #file.write(listOfLines[k])
-
-    file_o.close()
-    file.close()
-            
             
 
 ###################################
@@ -425,12 +330,14 @@ def writeDatFileQuad(meshFile, output_file):
 # lon, [30, 50]
 # lat, [30, 40]
 
-## Longitude coordinates of the desired slice of the orography  [-180, 180)
-lon_crop_extent = [30, 50] #[-180, -150.0]#[-10, 10.0]#[-181, -179]#[-179, -150.0]#[-180, -150.0] #[-13.5, 50.0] #[-190, -170.0] # [-190, -170] # thanks to Python that admits negative ids
-## Latitude coordinates of the desired slice of the orography [-90, 90]
-lat_crop_extent = [30, 40] #[46, 64.6]#[20, 30.6]#[46, 64.6]#[67, 69]#[46, 60] #[27.7, 64.6] #[-10, 10]
+# lon, [30, 50]
+# lat, [60, 90]
 
-#[50, 60]
+## Longitude coordinates of the desired slice of the orography  [-180, 180)
+lon_crop_extent = [30, 50]
+## Latitude coordinates of the desired slice of the orography [-90, 90]
+lat_crop_extent = [30, 40]
+
 ###################################
 
 
@@ -505,6 +412,7 @@ plt.show()
 
 
 
+
 # structured grid, faster than stadard scipy interpolation
 z_mesh_fem = interpolate.RegularGridInterpolator((lat_slice, lon_slice), z_slice, fill_value=None, bounds_error=False, method='linear')
 d_z_lat, d_z_lon = computeGrad_spherical(z_slice, lat_dem_res, lon_dem_res, LON, LAT)
@@ -512,6 +420,12 @@ d_z_lat_fem = interpolate.RegularGridInterpolator((lat_slice, lon_slice), d_z_la
 d_z_lon_fem = interpolate.RegularGridInterpolator((lat_slice, lon_slice), d_z_lon, fill_value=None, bounds_error=False, method='nearest')
 
 
+plt.contourf(LON, LAT, np.arctan(np.sqrt(d_z_lat**2 + d_z_lon**2))*180./np.pi)
+plt.axis('equal')
+plt.xlabel('longitude')
+plt.ylabel('latitude')
+plt.colorbar()
+plt.show()
 
 
 
@@ -706,6 +620,8 @@ mask_crop_boundary_mod[np.abs(LAT_mod-np.arctan( np.cos(LON_mod*np.pi/180.))*180
 mask_crop_boundary_mod[np.abs(LAT_mod-np.arctan(-np.sin(LON_mod*np.pi/180.))*180./np.pi)<toll] += 1
 mask_crop_boundary_mod[np.abs(LAT_mod-np.arctan( np.sin(LON_mod*np.pi/180.))*180./np.pi)<toll] += 1
 
+#mask_crop_boundary_mod[np.abs(LON_mod-45)<toll] += 1
+
 
 mask_crop_boundary_mod[0 , 0] += 1
 mask_crop_boundary_mod[-1, 0] += 1
@@ -714,6 +630,8 @@ mask_crop_boundary_mod[-1,-1] += 1
 
 plt.plot(LON_mod[mask_crop_boundary_mod>0], LAT_mod[mask_crop_boundary_mod>0], 'o')
 plt.axis('equal')
+plt.xlabel('longitude')
+plt.ylabel('latitude')
 plt.show()
 
 
@@ -722,6 +640,8 @@ mask_crop_boundary_mod = mask_crop_boundary_mod>1
 
 plt.plot(LON_mod[mask_crop_boundary_mod], LAT_mod[mask_crop_boundary_mod], 'o')
 plt.axis('equal')
+plt.xlabel('longitude')
+plt.ylabel('latitude')
 plt.show()
 
 
@@ -954,7 +874,7 @@ if (LAT[mask].size!=0 and LON[mask].size!=0):
 
 isFace_vect = [isFaceP1, isFaceP2, isFaceP3, isFaceP4, isFaceP5, isFaceP6]
 
-starting_mesh_size = 0.0028
+starting_mesh_size = 0.0028 # np.amin([lon_dem_res, lat_dem_res]) * np.sqrt(3.)
 
 
 for i in range(6):
@@ -962,6 +882,8 @@ for i in range(6):
         plt.triplot(tri[i].points[:,0], tri[i].points[:,1], tri[i].simplices)
         plt.plot(tri[i].points[:,0], tri[i].points[:,1], 'o')
 
+plt.xlabel('longitude')
+plt.ylabel('latitude')
 plt.axis('equal')
 plt.show()
 
@@ -1016,8 +938,14 @@ for ii in range(6):
                 
                 if (bool_val1 and bool_val2):
                     
-            
-                    XX, YY = Sphere2Cube([p1[0], p2[0]], [p1[1], p2[1]], lat_dem_res, lon_dem_res, ii)
+                    p1_vect = [p1[0], p2[0]]
+                    p2_vect = [p1[1], p2[1]]
+                    
+                    if ((p1[0] == p2[0]) or (p1[1] == p2[1])):
+                        p1_vect = np.linspace(p1[0], p2[0])
+                        p2_vect = np.linspace(p1[1], p2[1])
+                        
+                    XX, YY = Sphere2Cube(p1_vect, p2_vect, lat_dem_res, lon_dem_res, ii)
                     X_gl, Y_gl, Z_gl = Local2Global(XX, YY, ii)
                     
                     
@@ -1036,8 +964,11 @@ for ii in range(6):
                             pList.append(candidate.index(True)+1)
                     
                     
-                    
-                    gmsh.model.geo.addLine(pList[0], pList[-1], tag=current_e)
+                    if (np.size(pList)>2):
+                        gmsh.model.geo.addSpline(pList, tag=current_e)
+                    else:
+                        gmsh.model.geo.addLine(pList[0], pList[-1], tag=current_e)
+                        
                     e_globalList.append(current_e)
                     e_globalList.append(-current_e)
                     
@@ -1165,9 +1096,17 @@ for ii in range(6):
                 
                 if (bool_val1 and bool_val2):
                     
-            
-                    XX, YY = Sphere2Cube([p1[0], p2[0]], [p1[1], p2[1]], lat_dem_res, lon_dem_res, ii)
+                    p1_vect = [p1[0], p2[0]]
+                    p2_vect = [p1[1], p2[1]]
+                    
+                    if ((p1[0] == p2[0]) or (p1[1] == p2[1])):
+                        p1_vect = np.linspace(p1[0], p2[0])
+                        p2_vect = np.linspace(p1[1], p2[1])
+                        
+                    XX, YY = Sphere2Cube(p1_vect, p2_vect, lat_dem_res, lon_dem_res, ii)
                     X_gl, Y_gl, Z_gl = Local2Global(XX, YY, ii)
+                    
+                    
                     
             
                     pList = []
@@ -1182,8 +1121,12 @@ for ii in range(6):
                         else:
                             pList.append(candidate.index(True)+1)
             
+                    if (np.size(pList)>2):
+                        gmsh.model.geo.addSpline(pList, tag=current_e)
+                    else:
+                        gmsh.model.geo.addLine(pList[0], pList[-1], tag=current_e)
                     
-                    gmsh.model.geo.addLine(pList[0], pList[-1], tag=current_e)
+                    
                     e_globalList.append(current_e)
                     e_globalList.append(-current_e)
                     
@@ -1241,43 +1184,25 @@ bg_field = gmsh.model.mesh.field.add("PostView")
 gmsh.model.mesh.field.setNumber(bg_field, "ViewTag", sf_view)
 gmsh.model.mesh.field.setAsBackgroundMesh(bg_field)
 gmsh.model.mesh.generate(2)
-gmsh.write("mesh_final.msh")
-
-#gmsh.write("mesh_final.mesh")
-#modifyMeshFile("mesh_final.mesh", "mesh_mod.mesh", ii)
-              
+gmsh.write("mesh_final_cube.mesh")
 
 
 
+mesh_io = meshio.read("mesh_final_cube.mesh")
 
+lat, lon = XYZ2LonLat(mesh_io.points[:,0], mesh_io.points[:,1], mesh_io.points[:,2], lon_crop_extent)
+mesh_io.points[:,0] = lon
+mesh_io.points[:,1] = lat
+mesh_io.points[:,2] = np.sqrt(3.)
+
+
+meshio.write("mesh_final.mesh", mesh_io)
 
 
 gmsh.finalize()
-sys.exit()
 
 
 
-
-
-
-sys.exit()
-
-for ii in range(0,6):
-    isFace = isFace_vect[ ii ]
-    if isFace:
-        file_o = open("mesh2.mesh","r")
-        
-
-
-
-
-
-os.remove("*.mesh")
-
-
-
-
-sys.exit()
 
 
 
