@@ -5,9 +5,6 @@ import numpy as np
 from scipy import interpolate
 from scipy import ndimage
 from scipy.spatial import Delaunay
-#import subprocess
-#import os
-#from subprocess import STDOUT, check_output
 import netCDF4
 import matplotlib.pyplot as plt
 import gmsh
