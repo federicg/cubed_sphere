@@ -4,9 +4,12 @@ Build a non-singular unstructured mesh, via gmsh, on a sphere
 python requirements,
 numpy, scipy, netCDF4, matplotlib, gmsh, meshio
 
-the gmsh.py need gmsh bin installed in the pc $PATH, 
+# install first netcdf, with MacOS do
+brew install netcdf
+
+the gmsh.py need gmsh bin installed in the pc PATH, 
 be sure to have downloaded from https://gmsh.info the Software Development Kit (SDK) 
-and to have in the $PATH pc variable the gmsh executable
+and to have in the PATH pc variable the gmsh executable
 
 
 # Download world input dem to be processed at,
