@@ -1,5 +1,3 @@
-
-
 import sys
 import numpy as np
 from scipy import interpolate
@@ -54,7 +52,7 @@ def Sphere2Cube(lon_deg, lat_deg, lat_dem_res, lon_dem_res, idFace, a = 1):
     
 
 
-def XYZ2LonLat(X, Y, Z, lon_crop_extent, a=1):
+def XYZ2LonLat(X, Y, Z, lon_crop_extent):
 
     r = np.sqrt(X**2 + Y**2 + Z**2)
     
@@ -62,8 +60,11 @@ def XYZ2LonLat(X, Y, Z, lon_crop_extent, a=1):
     lon = np.arctan2(Y,X)*180./np.pi
     
     mask = np.logical_and(X==0, Y==0)
-    lon[mask] = lon_crop_extent[0]
-    
+    if np.size(lon)==1:
+        if mask==True:
+            lon = lon_crop_extent[0]
+    else:
+        lon[mask] = lon_crop_extent[0]
     
     return [lat, lon]
 
@@ -140,90 +141,90 @@ def Global2Local(X, Y, Z, idFace, a = 1):
     return [x, y]
     
 def computeGrad_spherical(z_slice, lat_dem_res, lon_dem_res, LON, LAT, R=np.sqrt(3.)):
-    d_z_lat_slice = np.gradient(z_slice, lat_dem_res, axis=0)
-    d_z_lon_slice = np.gradient(z_slice, lon_dem_res, axis=1)
+    d_z_lat_slice = np.gradient(z_slice, lat_dem_res*np.pi/180, axis=0)
+    d_z_lon_slice = np.gradient(z_slice, lon_dem_res*np.pi/180, axis=1)
     
     d_z_lat = (1./R)*d_z_lat_slice
     d_z_lon =  1./(R*np.cos(np.radians(LAT)))*d_z_lon_slice
 
     return [d_z_lat, d_z_lon]
 
-def computeGrad(d_z_lat_slice, d_z_lon_slice, LON_deg, LAT_deg, idFace, a=1.):
-    """
-    compute gradient in (x,y) local cube coordinates starting from (\theta, \lambda) spherical coordinates
-    """
-    R=a*np.sqrt(3.)
-    
-    LON = np.radians(LON_deg)
-    LAT = np.radians(LAT_deg)
-    
-    if idFace == 0:
-        d_x_lat = 0.
-        d_x_lon = a*(1. + np.tan(LON)**2.)
-    
-        d_y_lat = a*(1. + np.tan(LAT)**2.)/np.cos(LON)
-        d_y_lon = a*np.tan(LAT)*np.tan(LON)/np.cos(LON)
-        
-    elif idFace == 1:
-        d_x_lat = 0.
-        d_x_lon = a/(np.tan(LON)**2.)*(1. + np.tan(LON)**2.)
-    
-        d_y_lat = a * (1+np.tan(LAT)**2.) * ( 1 / np.sin(LON) )
-        d_y_lon = -a * np.tan(LAT) * ( 1 / (np.sin(LON)**2.) )*np.cos(LON)
-        
-    
-    elif idFace == 2:
-        d_x_lat = 0.
-        d_x_lon = a*(1+np.tan(LON)**2.)
-    
-        d_y_lat = -a * (1+np.tan(LAT)**2.) * ( 1 / np.cos(LON) )
-        d_y_lon = -a * np.tan(LAT) * ( 1 / (np.cos(LON)**2.) )*np.sin(LON)
-        
-    
-    elif idFace == 3:
-        d_x_lat = 0.
-        d_x_lon = a*(1+np.tan(LON)**2.)/(np.tan(LON)**2.)
-    
-        d_y_lat = -a * (1+np.tan(LAT)**2.) * ( 1 / np.sin(LON) )
-        d_y_lon = a * np.tan(LAT) * ( 1 / (np.sin(LON)**2.) )*np.cos(LON)
-        
+def inverse_metric_tensor(Localx, Localy, a=1):
+    R = a*np.sqrt(3)
+    r = np.sqrt(Localx**2 + Localy**2 + a**2)
+    scale_coeff = R**2/r**4
+    g11 =  scale_coeff*(a**2 + Localy**2)
+    g12 = -scale_coeff*Localx*Localy
+    g21 = g12
+    g22 = scale_coeff*(a**2 + Localx**2)
+    g_sqrt = R**2*a/r**3
+    g_det = (g_sqrt)**2
+
+    gap11 = g22/g_det
+    gap12 = -g12/g_det
+    gap21 = -g21/g_det
+    gap22 = g11/g_det
+    ginv = np.array([[gap11, gap12], [gap21, gap22]])
+    #g = np.array([[g11, g12], [g21, g22]])
+    return [g_sqrt, ginv]
+
+def localBasis2Spherical(x, y, lon_crop_extent, idFace, a=1):
+    R = a*np.sqrt(3.)
+
+    if idFace == 0 or idFace == 1 or idFace == 2 or idFace == 3:
+        lx = -(a/(a**2+x**2))
+        ly = lx*0
+        tx = -((R*x*y)/(np.sqrt((R**2*(a**2+x**2))/(a**2+x**2+y**2))*(a**2+x**2+y**2)**(3./2.)))
+        ty = np.sqrt((R**2*(a**2+x**2))/(a**2+x**2+y**2))/(R*np.sqrt(a**2+x**2+y**2))
     
     elif idFace == 4:
-        d_x_lat = -a * np.sin(LON) * 1 / (np.tan(LAT)**2.)*(1+np.tan(LAT)**2.)
-        d_x_lon = a * np.cos(LON) * 1 / np.tan(LAT)
-    
-        d_y_lat = a * np.cos(LON) * 1 / (np.tan(LAT)**2.)*(1+np.tan(LAT)**2.)
-        d_y_lon = a * np.sin(LON) * 1 / np.tan(LAT)
+        lx = y/(x**2+y**2)
+        ly = -(x/(x**2+y**2))
+        tx = -((a*R*x)/(np.sqrt((R**2*(x**2+y**2))/(a**2+x**2+y**2))*(a**2+x**2+y**2)**(3./2.)))
+        ty = -((a*R*y)/(np.sqrt((R**2*(x**2+y**2))/(a**2+x**2+y**2))*(a**2+x**2+y**2)**(3./2.)))
         
     elif idFace == 5:
-        d_x_lat = a * np.sin(LON) * 1 / (np.tan(LAT)**2.)*(1+np.tan(LAT)**2.)
-        d_x_lon = -a * np.cos(LON) * 1 / np.tan(LAT)
-    
-        d_y_lat = a * np.cos(LON) * 1 / (np.tan(LAT)**2.)*(1+np.tan(LAT)**2.)
-        d_y_lon = a * np.sin(LON) * 1 / np.tan(LAT)
+        lx = -(y/(x**2+y**2))
+        ly = x/(x**2+y**2)
+        tx = (a*R*x)/(np.sqrt((R**2*(x**2+y**2))/(a**2+x**2+y**2))*(a**2+x**2+y**2)**(3./2.))
+        ty = (a*R*y)/(np.sqrt((R**2*(x**2+y**2))/(a**2+x**2+y**2))*(a**2+x**2+y**2)**(3./2.))
          
-    else:
+    else: 
         print("Not recognized cube-face Id, STOP!")
         sys.exit()
-        
-    
-    d_z_x = d_z_lat_slice*d_x_lat + d_z_lon_slice*d_x_lon
-    d_z_y = d_z_lat_slice*d_y_lat + d_z_lon_slice*d_y_lon
-    
-    
-    return [d_z_x, d_z_y]
-    
-    
+
+    [X,Y,Z] = Local2Global(x, y, idFace)
+    [t, l] = XYZ2LonLat(X, Y, Z, lon_crop_extent)
+
+    A = np.array([[R*lx*np.cos(t), R*tx], [R*ly*np.cos(t), R*ty]])
+    return [A,lx,ly,tx,ty]
+
+def computeParDer(xx_1, xx_2, xx_3, z_node_triangle, iCubeFace):
+    z0 = z_node_triangle[0]
+    z1 = z_node_triangle[1]
+    z2 = z_node_triangle[2]
+
+    x0 = xx_1[0]
+    x1 = xx_2[0]
+    x2 = xx_3[0]
+
+    y0 = xx_1[1]
+    y1 = xx_2[1]
+    y2 = xx_3[1]
+
+    a2 = (x1*z0-x2*z0-x0*z1+x2*z1+x0*z2-x1*z2)/(x1*y0-x2*y0-x0*y1+x2*y1+x0*y2-x1*y2)
+    a1 = (y2*(-z0+z1)+y1*(z0-z2)+y0*(-z1+z2))/(x2*(y0-y1)+x0*(y1-y2)+x1*(-y0+y2))
+
+    return np.array([a1, a2])
+
+
 
     
-def compute_size_field(nodes, triangles, oro_interp, d_z_lat_interp, d_z_lon_interp, starting_mesh_size, lat_crop_extent, lon_crop_extent, a=1):
-    
-    
-    tau = 0.1
+def compute_size_field(nodes, triangles, oro_interp, d_z_lat_interp, d_z_lon_interp, lon_crop_extent, delta_min=1e-4, delta_max=.05, tau=.1, a=1):
     
     xyz = nodes[triangles]
     
-    lat_interp_node, lon_interp_node = XYZ2LonLat(nodes[:,0], nodes[:,1], nodes[:,2], lon_crop_extent, a)
+    lat_interp_node, lon_interp_node = XYZ2LonLat(nodes[:,0], nodes[:,1], nodes[:,2], lon_crop_extent)
     
     z_node = oro_interp((lat_interp_node, lon_interp_node), method='linear')
     
@@ -245,62 +246,71 @@ def compute_size_field(nodes, triangles, oro_interp, d_z_lat_interp, d_z_lon_int
     z_node = z_node[triangles]
     
     xyz_middle = (xyz[:,0,:] + xyz[:,1,:] + xyz[:,2,:])/3.
-    lat_interp_middle, lon_interp_middle = XYZ2LonLat(xyz_middle[:,0], xyz_middle[:,1], xyz_middle[:,2], lon_crop_extent, a)
+    lat_interp_middle, lon_interp_middle = XYZ2LonLat(xyz_middle[:,0], xyz_middle[:,1], xyz_middle[:,2], lon_crop_extent)
     d_z_lat_middle = d_z_lat_interp((lat_interp_middle, lon_interp_middle), method='nearest')
     d_z_lon_middle = d_z_lon_interp((lat_interp_middle, lon_interp_middle), method='nearest')
     
-    
+
     
     N_elements = xyz.shape[0]
-    sf = np.zeros(xyz.shape[0])
-    z_normal = np.array([0.,0.,1.])
+    sf = np.zeros(len(nodes))+1e4
     
     iCubeFace = -1
     for iTri in range(xyz.shape[0]):
         xyz_triangle = xyz[iTri]
         z_node_triangle = z_node[iTri]
-        
-        
-        z_grad = np.array([0.,0.,0.])
-        for iEdge in range(-2,1):
-            edge_normal = np.cross(z_normal, xyz_triangle[iEdge,:] - xyz_triangle[iEdge+1,:])
-            
-            if np.dot(edge_normal, xyz_triangle[iEdge+2,:] - xyz_triangle[iEdge,:]) < 0:
-                edge_normal *= -1.
-            
-            
-            z_grad += edge_normal * z_node_triangle[ iEdge+2 ]
-            
 
+        xx_1 = xyz_triangle[0,:]
+        xx_2 = xyz_triangle[1,:]
+        xx_3 = xyz_triangle[2,:]
+            
         
-        
-        if (np.allclose(xyz_triangle[0,0],1.) and np.allclose(xyz_triangle[1,0],1.) and np.allclose(xyz_triangle[2,0],1.)):
+        if (np.allclose(xx_1[0],a) and np.allclose(xx_2[0],a) and np.allclose(xx_3[0],a)):
             iCubeFace = 0
-        elif (np.allclose(xyz_triangle[0,1],1.) and np.allclose(xyz_triangle[1,1],1.) and np.allclose(xyz_triangle[2,1],1.)):
+        elif (np.allclose(xx_1[1],a) and np.allclose(xx_2[1],a) and np.allclose(xx_3[1],a)):
             iCubeFace = 1
-        elif (np.allclose(xyz_triangle[0,0],-1.) and np.allclose(xyz_triangle[1,0],-1.) and np.allclose(xyz_triangle[0,0],-1.)):
+        elif (np.allclose(xx_1[0],-a) and np.allclose(xx_2[0],-a) and np.allclose(xx_3[0],-a)):
             iCubeFace = 2
-        elif (np.allclose(xyz_triangle[0,1],-1.) and np.allclose(xyz_triangle[1,1],-1.) and np.allclose(xyz_triangle[2,1],-1.)):
+        elif (np.allclose(xx_1[1],-a) and np.allclose(xx_2[1],-a) and np.allclose(xx_3[1],-a)):
             iCubeFace = 3
-        elif (np.allclose(xyz_triangle[0,2],1.) and np.allclose(xyz_triangle[1,2],1.) and np.allclose(xyz_triangle[2,2],1.)):
+        elif (np.allclose(xx_1[2],a) and np.allclose(xx_2[2],a) and np.allclose(xx_3[2],a)):
             iCubeFace = 4
-        elif (np.allclose(xyz_triangle[0,2],-1.) and np.allclose(xyz_triangle[1,2],-1.) and np.allclose(xyz_triangle[2,2],-1.)):
+        elif (np.allclose(xx_1[2],-a) and np.allclose(xx_2[2],-a) and np.allclose(xx_3[2],-a)):
             iCubeFace = 5
         else:
             print("Not recognized cube-face Id, STOP!")
             sys.exit()
-            
-            
-            
-        d_z_x_middle, d_z_y_middle = computeGrad(d_z_lat_middle[iTri], d_z_lon_middle[iTri], lon_interp_middle[iTri], lat_interp_middle[iTri], iCubeFace, a)
-        eta_k = np.linalg.norm(z_grad - np.array([d_z_x_middle, d_z_y_middle, 0.]))
+
+        measure_tri = .5*np.linalg.norm(np.cross(xx_2 - xx_1, xx_3 - xx_1))
+
+        [Localx, Localy] = Global2Local(xyz_middle[0,0], xyz_middle[0,1], xyz_middle[0,2], iCubeFace)
+        [g_sqrt, ginv] = inverse_metric_tensor(Localx, Localy)
+
+        [A,lx,ly,tx,ty] = localBasis2Spherical(Localx, Localy, lon_crop_extent, iCubeFace)
+        xxl_1 = Global2Local(xx_1[0], xx_1[1], xx_1[2], iCubeFace)
+        xxl_2 = Global2Local(xx_2[0], xx_2[1], xx_2[2], iCubeFace)
+        xxl_3 = Global2Local(xx_3[0], xx_3[1], xx_3[2], iCubeFace)
+        vec_par_der_xy = computeParDer(xxl_1, xxl_2, xxl_3, z_node_triangle, iCubeFace)
+                             
+        left_contr = ginv@(np.array([d_z_lon_middle[iTri]*lx + d_z_lat_middle[iTri]*tx, d_z_lon_middle[iTri]*ly + d_z_lat_middle[iTri]*ty]))@A
+        right_contr = ginv@vec_par_der_xy@A
+
+        eta_k = np.sqrt(np.linalg.norm(left_contr - right_contr)**2*measure_tri*g_sqrt)
+
+        candidate = tau*np.sqrt(measure_tri/N_elements/.5)/(eta_k+1.e-8)
         
-        candidate = np.sqrt(1./N_elements/.5 * (tau/(eta_k+1.e-8))**2.)
- 
-        sf[ iTri ] = np.maximum(np.minimum(candidate, starting_mesh_size*4), starting_mesh_size/2) #np.maximum(np.minimum(candidate, starting_mesh_size*2), starting_mesh_size/2)
-        
+        for iPoi in range(3):
+            sf[triangles[iTri][iPoi]] = np.minimum(sf[triangles[iTri][iPoi]], np.maximum(np.minimum(candidate, delta_max), delta_min)) #np.maximum(np.minimum(candidate, starting_mesh_size*4), starting_mesh_size/2) #np.maximum(np.minimum(candidate, starting_mesh_size*2), starting_mesh_size/2)
     
-    return sf
+    for i in range(len(sf)):
+        if sf[i]==1e4:
+            Poi = nodes[i]
+            d = np.sum(np.abs(Poi-nodes)**2,axis=-1)**(1./2.)
+            b = np.ma.MaskedArray(d, (d==0)+(sf==1e4))
+            index_c = np.ma.argmin(b)
+            sf[i] = sf[index_c]
+
+    return sf 
     
 
 def GetId(LatOrLonDEM, LatOrLonExtent, LatLon_dem_res):
@@ -322,18 +332,25 @@ class Mesh:
 
 ###################################
 ## Inputs
-
-# lon, [30, 50]
-# lat, [30, 40]
-
-# lon, [30, 50]
-# lat, [60, 90]
+## Longitude coordinates of the desired slice of the orography  [-180, 180)
+#lon_crop_extent = [-100, -70]
+## Latitude coordinates of the desired slice of the orography [-90, 90]
+#lat_crop_extent = [60, 90]
 
 ## Longitude coordinates of the desired slice of the orography  [-180, 180)
 lon_crop_extent = [30, 50]
 ## Latitude coordinates of the desired slice of the orography [-90, 90]
 lat_crop_extent = [30, 40]
 
+earth_radius = 6.371e6
+
+MeshAlgorithm = 5 # Gmsh meshing algorithm, prefer to use MeshAdapt
+
+# baseline mesh size
+starting_mesh_size = 1e-3
+
+delta_min = 1e-3
+delta_max = .01 # coarsest mesh resolution
 ###################################
 
 
@@ -391,7 +408,7 @@ isFaceP6 = False
 
 lat_slice = lat_slice.data
 lon_slice = lon_slice.data
-z_slice   = z_slice.data
+z_slice   = z_slice.data/earth_radius*np.sqrt(3)
 
 if (lon_slice[0] > lon_slice[-1]): # non ascending order, pb with RegularGridInterpolator
     lon_slice[lon_slice >= lon_slice[0]] -= 360.
@@ -406,9 +423,6 @@ plt.colorbar()
 plt.show()
 
 
-
-
-
 # structured grid, faster than stadard scipy interpolation
 z_mesh_fem = interpolate.RegularGridInterpolator((lat_slice, lon_slice), z_slice, fill_value=None, bounds_error=False, method='linear')
 d_z_lat, d_z_lon = computeGrad_spherical(z_slice, lat_dem_res, lon_dem_res, LON, LAT)
@@ -416,12 +430,14 @@ d_z_lat_fem = interpolate.RegularGridInterpolator((lat_slice, lon_slice), d_z_la
 d_z_lon_fem = interpolate.RegularGridInterpolator((lat_slice, lon_slice), d_z_lon, fill_value=None, bounds_error=False, method='nearest')
 
 
-plt.contourf(LON, LAT, np.arctan(np.sqrt(d_z_lat**2 + d_z_lon**2))*180./np.pi)
+
+plt.contourf(LON, LAT, np.arctan(np.sqrt(d_z_lat**2 + d_z_lon**2))*180/np.pi)
 plt.axis('equal')
 plt.xlabel('longitude')
 plt.ylabel('latitude')
 plt.colorbar()
 plt.show()
+
 
 
 
@@ -577,13 +593,13 @@ LON_mod, LAT_mod = np.meshgrid(lon_slice_mod, lat_slice_mod)
 
 
 mask_crop_boundary = LON_mod==LON_mod
-mask_crop_boundary = mask_crop_boundary.astype(np.int) - ndimage.binary_erosion(mask_crop_boundary.astype(np.int))
-mask_crop_boundary = mask_crop_boundary.astype(np.bool)
+mask_crop_boundary = mask_crop_boundary.astype(int) - ndimage.binary_erosion(mask_crop_boundary.astype(int))
+mask_crop_boundary = mask_crop_boundary.astype(bool)
 
 
 
 
-mask_crop_boundary_mod = mask_crop_boundary.astype(np.int)
+mask_crop_boundary_mod = mask_crop_boundary.astype(int)
 if (mask_crop_boundary_mod[LON_mod==  45].size>0):
     mask_crop_boundary_mod[np.logical_and(LON_mod==  45, LAT_mod==lat_slice_mod[0 ])]  += 1
     mask_crop_boundary_mod[np.logical_and(LON_mod==  45, LAT_mod==lat_slice_mod[-1])]  += 1
@@ -642,7 +658,6 @@ plt.show()
 
 
 
-
     
 
 
@@ -654,7 +669,7 @@ if (LAT[mask].size!=0 and LON[mask].size!=0):
     print("isFaceP1 ", isFaceP1)
     
     bool_val = np.logical_not(np.logical_and(np.abs(LAT_mod)<np.arctan(np.cos(LON_mod*np.pi/180.))*180./np.pi+toll, np.cos(LON_mod*np.pi/180)>1./np.sqrt(2.)-toll))
-    mask_crop_boundary_p = mask_crop_boundary_mod.astype(np.bool)
+    mask_crop_boundary_p = mask_crop_boundary_mod.astype(bool)
     mask_crop_boundary_p[bool_val] = False
     
     
@@ -689,7 +704,7 @@ if (LAT[mask].size!=0 and LON[mask].size!=0):
     print("isFaceP2 ", isFaceP2)
     
     bool_val = np.logical_not(np.logical_and(np.abs(LAT_mod)<np.arctan(np.sin(LON_mod*np.pi/180.))*180./np.pi+toll, np.sin(LON_mod*np.pi/180)>1./np.sqrt(2.)-toll))
-    mask_crop_boundary_p = mask_crop_boundary_mod.astype(np.bool)
+    mask_crop_boundary_p = mask_crop_boundary_mod.astype(bool)
     mask_crop_boundary_p[bool_val] = False
     
 
@@ -726,7 +741,7 @@ if (LAT[mask].size!=0 and LON[mask].size!=0):
     print("isFaceP3 ", isFaceP3)
     
     bool_val = np.logical_not(np.logical_and(np.abs(LAT_mod)<-np.arctan(np.cos(LON_mod*np.pi/180.))*180./np.pi+toll, np.cos(LON_mod*np.pi/180)<-1./np.sqrt(2.)+toll))
-    mask_crop_boundary_p = mask_crop_boundary_mod.astype(np.bool)
+    mask_crop_boundary_p = mask_crop_boundary_mod.astype(bool)
     mask_crop_boundary_p[bool_val] = False
     
     
@@ -761,7 +776,7 @@ if (LAT[mask].size!=0 and LON[mask].size!=0):
     print("isFaceP4 ", isFaceP4)
     
     bool_val = np.logical_not(np.logical_and(np.abs(LAT_mod)<-np.arctan(np.sin(LON_mod*np.pi/180.))*180./np.pi+toll, np.sin(LON_mod*np.pi/180)<-1./np.sqrt(2.)+toll))
-    mask_crop_boundary_p = mask_crop_boundary_mod.astype(np.bool)
+    mask_crop_boundary_p = mask_crop_boundary_mod.astype(bool)
     mask_crop_boundary_p[bool_val] = False
     
     
@@ -800,7 +815,7 @@ if (LAT[mask].size!=0 and LON[mask].size!=0):
 
 
     bool_val = np.logical_not(bool_val)
-    mask_crop_boundary_p = mask_crop_boundary_mod.astype(np.bool)
+    mask_crop_boundary_p = mask_crop_boundary_mod.astype(bool)
     mask_crop_boundary_p[bool_val] = False
     
     
@@ -840,7 +855,7 @@ if (LAT[mask].size!=0 and LON[mask].size!=0):
     
 
     bool_val = np.logical_not(bool_val)
-    mask_crop_boundary_p = mask_crop_boundary_mod.astype(np.bool)
+    mask_crop_boundary_p = mask_crop_boundary_mod.astype(bool)
     mask_crop_boundary_p[bool_val] = False
     
 #    plt.plot(LON[mask], LAT[mask], 'o')
@@ -870,8 +885,6 @@ if (LAT[mask].size!=0 and LON[mask].size!=0):
 
 isFace_vect = [isFaceP1, isFaceP2, isFaceP3, isFaceP4, isFaceP5, isFaceP6]
 
-starting_mesh_size = 0.0028 # np.amin([lon_dem_res, lat_dem_res]) * np.sqrt(3.)
-
 
 for i in range(6):
     if isFace_vect[ i ]:
@@ -884,12 +897,10 @@ plt.axis('equal')
 plt.show()
 
 
-
-
 # build sf_view
 gmsh.initialize()
 gmsh.option.setNumber("Mesh.RecombineAll", 0)
-gmsh.option.setNumber("Mesh.Algorithm", 6)
+gmsh.option.setNumber("Mesh.Algorithm", MeshAlgorithm)
 gmsh.option.setNumber("General.Terminal", 1)
 gmsh.option.setNumber("Mesh.Format", 30)
 gmsh.option.setNumber("Mesh.SaveAll", 1)
@@ -981,8 +992,8 @@ for ii in range(6):
                     
                     candidate = [np.allclose([p1, p2],point) for point in pointVertex_globalList].index(True)
                     eList.append(e_globalList[candidate])
-                    
-                    
+            
+            
             
             is_entered = False
             for ee in eList:
@@ -1033,25 +1044,34 @@ gmsh.write("mesh_starting.msh")
 mesh = Mesh()
             
 print("mesh elements, ", mesh.triangles.shape[0])
-            
-nodes_coords = np.reshape(gmsh.model.mesh.getNodesForPhysicalGroup(1,1)[1],(-1,3))
-nodes_ids    = gmsh.model.mesh.getNodesForPhysicalGroup(1,1)[0]
-            
 
-sf_ele = compute_size_field(mesh.vxyz, mesh.triangles, z_mesh_fem, d_z_lat_fem, d_z_lon_fem, starting_mesh_size, lat_crop_extent, lon_crop_extent)
-            
+# boundary nodes       
+nodes_coords = np.reshape(gmsh.model.mesh.getNodesForPhysicalGroup(1,1)[1],(-1,3)) 
+nodes_ids    = gmsh.model.mesh.getNodesForPhysicalGroup(1,1)[0]
+
+
+
+
+sf_ele = compute_size_field(mesh.vxyz, mesh.triangles, z_mesh_fem, d_z_lat_fem, d_z_lon_fem, lon_crop_extent, delta_min, delta_max)
 sf_node = nodes_ids/nodes_ids*starting_mesh_size
+
+#sf_tot = np.concatenate((sf_ele, sf_node))
+#tags_tot = np.concatenate((mesh.vtags, nodes_ids))
+sf_tot = sf_ele
+tags_tot = mesh.vtags
             
-sf_view = gmsh.view.add("mesh size field")
-gmsh.view.addModelData(sf_view, 0, current_model, "ElementData", mesh.triangles_tags, sf_ele[:, None])
-gmsh.view.addModelData(sf_view, 0, current_model, "NodeData", nodes_ids, sf_node[:,None])
+sf_view = gmsh.view.add("mesh size field") # ElementNodeData
+#gmsh.view.addModelData(sf_view, 0, current_model, "ElementNodeData", mesh.triangles_tags, sf_ele[:, None])
+#gmsh.view.addModelData(sf_view, 0, current_model, "ElementData", mesh.triangles_tags, sf_ele[:, None])
+gmsh.view.addModelData(sf_view, 0, current_model, "NodeData", tags_tot, sf_tot[:,None])
 gmsh.view.write(sf_view, "sf.pos")
-        
+
 
 # Force gmsh to use just the background mesh provided
 gmsh.option.setNumber("Mesh.CharacteristicLengthExtendFromBoundary", 0)
 gmsh.option.setNumber("Mesh.CharacteristicLengthFromPoints", 0)
 gmsh.option.setNumber("Mesh.CharacteristicLengthFromCurvature", 0)
+
 
 current_model = "final"
 gmsh.model.add(current_model)
