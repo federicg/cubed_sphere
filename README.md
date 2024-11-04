@@ -12,7 +12,7 @@ be sure to have downloaded from https://gmsh.info the Software Development Kit (
 and to have in the PATH pc variable the gmsh executable
 
 
-- Download world input dem to be processed at,
+Download world input dem to be processed at,
 http://sgbd.acmad.org:8080/thredds/fileServer/regcminput/SURFACE/GTOPO_DEM_30s.nc
 
 
