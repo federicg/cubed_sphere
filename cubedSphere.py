@@ -333,11 +333,6 @@ class Mesh:
 ###################################
 ## Inputs
 ## Longitude coordinates of the desired slice of the orography  [-180, 180)
-#lon_crop_extent = [-100, -70]
-## Latitude coordinates of the desired slice of the orography [-90, 90]
-#lat_crop_extent = [60, 90]
-
-## Longitude coordinates of the desired slice of the orography  [-180, 180)
 lon_crop_extent = [30, 50]
 ## Latitude coordinates of the desired slice of the orography [-90, 90]
 lat_crop_extent = [30, 40]
