@@ -5,7 +5,7 @@ from scipy import ndimage
 from scipy.spatial import Delaunay
 import netCDF4
 import matplotlib.pyplot as plt
-import gmsh
+import gmsh  
 import meshio
 
 def Sphere2Cube(lon_deg, lat_deg, lat_dem_res, lon_dem_res, idFace, a = 1):
