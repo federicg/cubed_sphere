@@ -13,7 +13,7 @@ and to have in the PATH pc variable the gmsh executable
 
 
 # Download world input dem to be processed at,
-http://154.66.220.45:8080/thredds/catalog/regcminput/SURFACE/catalog.html?dataset=regcminput/SURFACE/GTOPO_DEM_30s.nc
+http://sgbd.acmad.org:8080/thredds/fileServer/regcminput/SURFACE/GTOPO_DEM_30s.nc
 
 
 #
